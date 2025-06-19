@@ -117,6 +117,56 @@ curl http://localhost:8880
 
 ### Решение
 
+Добавляем еще один Python сервер
+```bash
+mkdir http-3
+cd http-3
+vim index.html
+
+# Содержимое index.html
+Server 3 :8883
+
+python3 -m http.server 8883 --bind 0.0.0.0 &
+cd
+```
+
+Меняем файл [/etc/haproxy/haproxy.cfg](task-2/haproxy.cfg) (mode http, фильтр и веса)
+```
+global
+    log stdout format raw local0
+    maxconn 4096
+    user haproxy
+    group haproxy
+    daemon
+
+defaults
+    mode http
+
+frontend ft_web
+    bind *:8880
+    acl host_example_local hdr(host) -i example.local
+    use_backend bk_web if host_example_local
+
+backend bk_web
+    balance roundrobin
+    server server1 127.0.0.1:8881 check weight 2
+    server server2 127.0.0.1:8882 check weight 3
+    server server3 127.0.0.1:8883 check weight 4
+```
+
+Перезагружаем сервер (reload не освобождает порт, или можно было использовать другой)
+```bash
+sudo systemctl restart haproxy.service
+```
+
+Проверяем
+```bash
+curl -H 'Host: example.local' http://localhost:8880
+curl http://localhost:8880
+```
+
+![](img/img-02-01.png)
+
 ---
 
 ## Задания со звёздочкой*
@@ -131,6 +181,52 @@ curl http://localhost:8880
 
 ### Решение
 
+Установил Nginx и заменил содержание его конфигурационного файла [/etc/nginx/sites-available/default](task-3/default)
+```bash
+sudo apt install -y nginx
+sudo mv /etc/nginx/sites-available/default /etc/nginx/sites-available/default.bak
+sudo vim /etc/nginx/sites-available/default
+```
+
+на следующее
+```
+server {
+    listen 80;
+    server_name example.local;
+
+    location ~* \.jpe?g$ {
+        root /var/www/images;
+        try_files $uri =404;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8880;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+Создал каталог /var/www/images, настроил права, и скопировал туда несколько картинок.
+```bash
+sudo mkdir -p /var/www/images
+sudo cp ~/Downloads/*.jpg /var/www/images
+sudo chown -R www-data:www-data /var/www/images
+sudo chmod -R 755 /var/www
+```
+
+Проверил и перечитал конфигурацию Nginx. 
+```
+sudo nginx -t
+sudo systemctl reload nginx.service
+```
+В [конфигурации HAProxy](task-3/haproxy.cfg) оставил три python сервера в режиме http как в предыдущем задании.
+
+Проверяю
+
+![](img/img-03-01.png)
+
+![](img/img-03-02.png)
+
 ---
 
 ### Задание 4*
@@ -142,6 +238,62 @@ curl http://localhost:8880
 - На проверку направьте конфигурационный файл HAProxy, скриншоты, демонстрирующие запросы к разным фронтендам и ответам от разных бэкендов.
 
 ### Решение
+
+Добавляем еще один Python сервер
+```bash
+mkdir http-4
+cd http-4
+vim index.html
+
+# Содержимое index.html
+Server 4 :8884
+
+python3 -m http.server 8884 --bind 0.0.0.0 &
+cd
+```
+
+Меняем файл [/etc/haproxy/haproxy.cfg](task-4/haproxy.cfg)
+```
+global
+    log stdout format raw local0
+    maxconn 4096
+    user haproxy
+    group haproxy
+    daemon
+
+defaults
+    mode http
+
+frontend ft_web
+    bind *:8880
+    acl host_example1_local hdr(host) -i example1.local
+    acl host_example2_local hdr(host) -i example2.local
+    use_backend bk_web1 if host_example1_local
+    use_backend bk_web2 if host_example2_local
+
+backend bk_web1
+    balance roundrobin
+    server server1 127.0.0.1:8881 check
+    server server2 127.0.0.1:8882 check
+
+backend bk_web2
+    balance roundrobin
+    server server3 127.0.0.1:8883 check
+    server server4 127.0.0.1:8884 check
+```
+
+Не забываем перечитывать конфигурацию.
+```bash
+sudo systemctl reload haproxy.service
+```
+
+Конфигурация Nginx [/etc/nginx/sites-available/default](task-4/default) осталась та же.
+
+Проверяю
+
+![](img/img-04-01.png)
+
+![](img/img-04-02.png)
 
 ------
 
